@@ -58,7 +58,8 @@ def reconstruction_loss(x, x_recon, distribution):
         # recon_loss = torch.sum(F.binary_cross_entropy_with_logits(x_recon, x, reduction='none') + cont_bern_log_norm(x_recon)).div(batch_size)
         # subtract contribution from missing distributions which should be ignored
         # print(recon_loss)
-        per_cell_recon_loss = F.binary_cross_entropy_with_logits(x_recon, x, reduction='none') + cont_bern_log_norm(x_recon)
+        x_recon = F.sigmoid(x_recon)
+        per_cell_recon_loss = F.binary_cross_entropy(x_recon, x, reduction='none') + cont_bern_log_norm(x_recon)
         # zero out loss from any missing values (e.g. missing mask)
         for i in range(x_recon.shape[0]):
             for j in range(x_recon.shape[1]):
