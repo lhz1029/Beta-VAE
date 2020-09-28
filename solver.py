@@ -20,16 +20,16 @@ from dataset import return_data
 
 
 # from original continuous bernoulli paper
-def cont_bern_log_norm(lam, l_lim=0.49, u_lim=0.51):
-    # computes the log normalizing constant of a continuous Bernoulli distribution in a numerically stable way.
-    # returns the log normalizing constant for lam in (0, l_lim) U (u_lim, 1) and a Taylor approximation in
-    # [l_lim, u_lim].
-    # cut_y below might appear useless, but it is important to not evaluate log_norm near 0.5 as tf.where evaluates
-    # both options, regardless of the value of the condition.
-    cut_lam = tf.where(tf.logical_or(tf.less(lam, l_lim), tf.greater(lam, u_lim)), lam, l_lim * tf.ones_like(lam))
-    log_norm = tf.log(tf.abs(2.0 * tf.atanh(1 - 2.0 * cut_lam))) - tf.log(tf.abs(1 - 2.0 * cut_lam))
-    taylor = tf.log(2.0) + 4.0 / 3.0 * tf.pow(lam - 0.5, 2) + 104.0 / 45.0 * tf.pow(lam - 0.5, 4)
-    return tf.where(tf.logical_or(tf.less(lam, l_lim), tf.greater(lam, u_lim)), log_norm, taylor)
+# def cont_bern_log_norm(lam, l_lim=0.49, u_lim=0.51):
+#     # computes the log normalizing constant of a continuous Bernoulli distribution in a numerically stable way.
+#     # returns the log normalizing constant for lam in (0, l_lim) U (u_lim, 1) and a Taylor approximation in
+#     # [l_lim, u_lim].
+#     # cut_y below might appear useless, but it is important to not evaluate log_norm near 0.5 as tf.where evaluates
+#     # both options, regardless of the value of the condition.
+#     cut_lam = tf.where(tf.logical_or(tf.less(lam, l_lim), tf.greater(lam, u_lim)), lam, l_lim * tf.ones_like(lam))
+#     log_norm = tf.log(tf.abs(2.0 * tf.atanh(1 - 2.0 * cut_lam))) - tf.log(tf.abs(1 - 2.0 * cut_lam))
+#     taylor = tf.log(2.0) + 4.0 / 3.0 * tf.pow(lam - 0.5, 2) + 104.0 / 45.0 * tf.pow(lam - 0.5, 4)
+#     return tf.where(tf.logical_or(tf.less(lam, l_lim), tf.greater(lam, u_lim)), log_norm, taylor)
 
 
 def cont_bern_log_norm(lam, l_lim=0.49, u_lim=0.51):
@@ -55,8 +55,16 @@ def reconstruction_loss(x, x_recon, distribution):
     elif distribution == 'cont_bernoulli':
         # print(F.binary_cross_entropy_with_logits(x_recon, x, reduction='none'))
         # print(cont_bern_log_norm(x_recon))
-        recon_loss = torch.sum(F.binary_cross_entropy_with_logits(x_recon, x, reduction='none') + cont_bern_log_norm(x_recon)).div(batch_size)
+        # recon_loss = torch.sum(F.binary_cross_entropy_with_logits(x_recon, x, reduction='none') + cont_bern_log_norm(x_recon)).div(batch_size)
+        # subtract contribution from missing distributions which should be ignored
         # print(recon_loss)
+        per_cell_recon_loss = F.binary_cross_entropy_with_logits(x_recon, x, reduction='none') + cont_bern_log_norm(x_recon)
+        # zero out loss from any missing values (e.g. missing mask)
+        for i in range(x_recon.shape[0]):
+            for j in range(x_recon.shape[1]):
+                if x_recon[i, j].sum() == 0.0:
+                    per_cell_recon_loss[[[i], [j]]] = 0.0
+        recon_loss = torch.sum(per_cell_recon_loss).div(batch_size)
     else:
         recon_loss = None
     print('recon', recon_loss)

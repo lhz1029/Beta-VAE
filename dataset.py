@@ -74,7 +74,7 @@ def return_data(args):
         dset = CustomTensorDataset
 
     elif name.lower() == 'blooddist':
-        root = os.path.join(dset_dir, 'BloodDist', 'fake.npy')
+        root = os.path.join(dset_dir, 'BloodDist', 'train_grid_cells.npy')
         data = np.load(root)
         data = torch.from_numpy(data).float()
         train_kwargs = {'data_tensor':data}
