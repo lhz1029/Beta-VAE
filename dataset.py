@@ -73,6 +73,13 @@ def return_data(args):
         train_kwargs = {'data_tensor':data}
         dset = CustomTensorDataset
 
+    elif name.lower() == 'blooddist':
+        root = os.path.join(dset_dir, 'BloodDist', 'fake.npy')
+        data = np.load(root)
+        data = torch.from_numpy(data).float()
+        train_kwargs = {'data_tensor':data}
+        dset = CustomTensorDataset
+
     else:
         raise NotImplementedError
 

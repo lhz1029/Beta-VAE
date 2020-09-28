@@ -52,9 +52,14 @@ def reconstruction_loss(x, x_recon, distribution):
     elif distribution == 'gaussian':
         x_recon = F.sigmoid(x_recon)
         recon_loss = F.mse_loss(x_recon, x, size_average=False).div(batch_size)
+    elif distribution == 'cont_bernoulli':
+        # print(F.binary_cross_entropy_with_logits(x_recon, x, reduction='none'))
+        # print(cont_bern_log_norm(x_recon))
+        recon_loss = torch.sum(F.binary_cross_entropy_with_logits(x_recon, x, reduction='none') + cont_bern_log_norm(x_recon)).div(batch_size)
+        # print(recon_loss)
     else:
         recon_loss = None
-
+    print('recon', recon_loss)
     return recon_loss
 
 
@@ -122,6 +127,9 @@ class Solver(object):
         elif args.dataset.lower() == 'celeba':
             self.nc = 3
             self.decoder_dist = 'gaussian'
+        elif args.dataset.lower() == 'blooddist':
+            self.nc = 4
+            self.decoder_dist = 'cont_bernoulli'
         else:
             raise NotImplementedError
 
@@ -204,7 +212,7 @@ class Solver(object):
 
                 if self.global_iter%self.display_step == 0:
                     pbar.write('[{}] recon_loss:{:.3f} total_kld:{:.3f} mean_kld:{:.3f}'.format(
-                        self.global_iter, recon_loss.data[0], total_kld.data[0], mean_kld.data[0]))
+                        self.global_iter, recon_loss.data, total_kld.data[0], mean_kld.data[0]))
 
                     var = logvar.exp().mean(0).data
                     var_str = ''
@@ -242,9 +250,16 @@ class Solver(object):
     def viz_reconstruction(self):
         self.net_mode(train=False)
         x = self.gather.data['images'][0][:100]
-        x = make_grid(x, normalize=True)
         x_recon = self.gather.data['images'][1][:100]
-        x_recon = make_grid(x_recon, normalize=True)
+        if self.dataset == 'blooddist':
+            x *= 255
+            x_recon *= 255
+            x = make_grid(x.reshape(-1, 1, x.shape[-2], x.shape[-1]), normalize=True, nrow=4, pad_value=255)
+            x_recon = make_grid(x_recon.reshape(-1, 1, x_recon.shape[-2], x_recon.shape[-1]), normalize=True, nrow=4, pad_value=255)
+
+        else:
+            x = make_grid(x, normalize=True)
+            x_recon = make_grid(x_recon, normalize=True)
         images = torch.stack([x, x_recon], dim=0).cpu()
         self.viz.images(images, env=self.viz_name+'_reconstruction',
                         opts=dict(title=str(self.global_iter)), nrow=10)
@@ -369,6 +384,7 @@ class Solver(object):
         self.net_mode(train=True)
 
     def viz_traverse(self, limit=3, inter=2/3, loc=-1):
+        print('visualizing...')
         self.net_mode(train=False)
         import random
 
@@ -426,6 +442,12 @@ class Solver(object):
                     samples.append(sample)
                     gifs.append(sample)
             samples = torch.cat(samples, dim=0).cpu()
+            print(samples.shape)
+            if self.dataset == 'blooddist':
+                samples = samples.reshape(-1, 1, samples.shape[-2], samples.shape[-1])
+                samples = torch.clamp(samples * 255, min=0, max=255)
+                # WARNING: hack for nans in the output
+                samples[samples != samples] = 0
             title = '{}_latent_traversal(iter:{})'.format(key, self.global_iter)
 
             if self.viz_on:
@@ -436,12 +458,19 @@ class Solver(object):
             output_dir = os.path.join(self.output_dir, str(self.global_iter))
             os.makedirs(output_dir, exist_ok=True)
             gifs = torch.cat(gifs)
-            gifs = gifs.view(len(Z), self.z_dim, len(interpolation), self.nc, 64, 64).transpose(1, 2)
+            if self.dataset == 'blooddist':
+                gifs = gifs.view(len(Z), self.z_dim * self.nc, len(interpolation), 1, 64, 64).transpose(1, 2)
+            else:
+                gifs = gifs.view(len(Z), self.z_dim, len(interpolation), self.nc, 64, 64).transpose(1, 2)
             for i, key in enumerate(Z.keys()):
                 for j, val in enumerate(interpolation):
+                    if self.dataset == 'blooddist':
+                        pad_value = 255
+                    else:
+                        pad_value = 1
                     save_image(tensor=gifs[i][j].cpu(),
-                               filename=os.path.join(output_dir, '{}_{}.jpg'.format(key, j)),
-                               nrow=self.z_dim, pad_value=1)
+                               fp=os.path.join(output_dir, '{}_{}.jpg'.format(key, j)),
+                               nrow=self.z_dim, pad_value=pad_value)
 
                 grid2gif(os.path.join(output_dir, key+'*.jpg'),
                          os.path.join(output_dir, key+'.gif'), delay=10)
