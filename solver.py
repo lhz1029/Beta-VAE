@@ -128,7 +128,7 @@ class Solver(object):
             self.nc = 3
             self.decoder_dist = 'gaussian'
         elif args.dataset.lower() == 'blooddist':
-            self.nc = 4
+            self.nc = 5
             self.decoder_dist = 'cont_bernoulli'
         else:
             raise NotImplementedError
@@ -254,8 +254,8 @@ class Solver(object):
         if self.dataset == 'blooddist':
             x *= 255
             x_recon *= 255
-            x = make_grid(x.reshape(-1, 1, x.shape[-2], x.shape[-1]), normalize=True, nrow=4, pad_value=255)
-            x_recon = make_grid(x_recon.reshape(-1, 1, x_recon.shape[-2], x_recon.shape[-1]), normalize=True, nrow=4, pad_value=255)
+            x = make_grid(x.reshape(-1, 1, x.shape[-2], x.shape[-1]), normalize=True, nrow=5, pad_value=255)
+            x_recon = make_grid(x_recon.reshape(-1, 1, x_recon.shape[-2], x_recon.shape[-1]), normalize=True, nrow=5, pad_value=255)
 
         else:
             x = make_grid(x, normalize=True)
