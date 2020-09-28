@@ -4,6 +4,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import os
+import math
 from tqdm import tqdm
 import visdom
 
@@ -17,6 +18,30 @@ from utils import cuda, grid2gif
 from model import BetaVAE_H, BetaVAE_B
 from dataset import return_data
 
+
+# from original continuous bernoulli paper
+def cont_bern_log_norm(lam, l_lim=0.49, u_lim=0.51):
+    # computes the log normalizing constant of a continuous Bernoulli distribution in a numerically stable way.
+    # returns the log normalizing constant for lam in (0, l_lim) U (u_lim, 1) and a Taylor approximation in
+    # [l_lim, u_lim].
+    # cut_y below might appear useless, but it is important to not evaluate log_norm near 0.5 as tf.where evaluates
+    # both options, regardless of the value of the condition.
+    cut_lam = tf.where(tf.logical_or(tf.less(lam, l_lim), tf.greater(lam, u_lim)), lam, l_lim * tf.ones_like(lam))
+    log_norm = tf.log(tf.abs(2.0 * tf.atanh(1 - 2.0 * cut_lam))) - tf.log(tf.abs(1 - 2.0 * cut_lam))
+    taylor = tf.log(2.0) + 4.0 / 3.0 * tf.pow(lam - 0.5, 2) + 104.0 / 45.0 * tf.pow(lam - 0.5, 4)
+    return tf.where(tf.logical_or(tf.less(lam, l_lim), tf.greater(lam, u_lim)), log_norm, taylor)
+
+
+def cont_bern_log_norm(lam, l_lim=0.49, u_lim=0.51):
+    # computes the log normalizing constant of a continuous Bernoulli distribution in a numerically stable way.
+    # returns the log normalizing constant for lam in (0, l_lim) U (u_lim, 1) and a Taylor approximation in
+    # [l_lim, u_lim].
+    # cut_y below might appear useless, but it is important to not evaluate log_norm near 0.5 as tf.where evaluates
+    # both options, regardless of the value of the condition.
+    cut_lam = torch.where((lam < l_lim) | (lam > u_lim), lam, l_lim * torch.ones_like(lam))
+    log_norm = torch.log(abs(2.0 * torch.atanh(1 - 2.0 * cut_lam))) - torch.log(abs(1 - 2.0 * cut_lam))
+    taylor = math.log(2.0) + 4.0 / 3.0 * torch.square(lam - 0.5) + 104.0 / 45.0 * torch.pow(lam - 0.5, 4)
+    return torch.where((lam < l_lim) | (lam > u_lim), log_norm, taylor)
 
 def reconstruction_loss(x, x_recon, distribution):
     batch_size = x.size(0)
